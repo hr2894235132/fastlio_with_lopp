@@ -85,8 +85,10 @@ class Preprocess
 
   Preprocess();
   ~Preprocess();
-  
+
+  // process livox lidar special data type:livox_ros_driver::CustomMsg
   void process(const livox_ros_driver::CustomMsg::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
+  // process normal lidar data type:sensor_msgs::PointCloud2
   void process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
   void set(bool feat_en, int lid_type, double bld, int pfilt_num);
 

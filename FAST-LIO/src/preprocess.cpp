@@ -31,7 +31,7 @@ Preprocess::Preprocess()
 }
 
 Preprocess::~Preprocess() {}
-
+/*** set parameters ***/
 void Preprocess::set(bool feat_en, int lid_type, double bld, int pfilt_num)
 {
   feature_enabled = feat_en;
@@ -39,13 +39,13 @@ void Preprocess::set(bool feat_en, int lid_type, double bld, int pfilt_num)
   blind = bld;
   point_filter_num = pfilt_num;
 }
-
+/*** process livox lidar special data type:livox_ros_driver::CustomMsg ***/
 void Preprocess::process(const livox_ros_driver::CustomMsg::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out)
 {  
   avia_handler(msg);
   *pcl_out = pl_surf;
 }
-
+/*** process normal lidar data type:sensor_msgs::PointCloud2 ***/
 void Preprocess::process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out)
 {
   switch (lidar_type)
@@ -84,7 +84,8 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
     pl_buff[i].reserve(plsize);
   }
   uint valid_num = 0;
-  
+
+  // 提取特征点
   if (feature_enabled)
   {
     for(uint i=1; i<plsize; i++)
@@ -98,6 +99,7 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
         pl_full[i].curvature = msg->points[i].offset_time / float(1000000); //use curvature as time of each laser points
 
         bool is_new = false;
+        // 前后两点相隔一定距离，if满足，存入pl_buff
         if((abs(pl_full[i].x - pl_full[i-1].x) > 1e-7) 
             || (abs(pl_full[i].y - pl_full[i-1].y) > 1e-7)
             || (abs(pl_full[i].z - pl_full[i-1].z) > 1e-7))
@@ -110,8 +112,10 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
     static double time = 0.0;
     count ++;
     double t0 = omp_get_wtime();
+    // 遍历所有激光扫描线
     for(int j=0; j<N_SCANS; j++)
     {
+        // the point in buff is too little
       if(pl_buff[j].size() <= 5) continue;
       pcl::PointCloud<PointType> &pl = pl_buff[j];
       plsize = pl.size();
@@ -127,6 +131,7 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
         vz = pl[i].z - pl[i + 1].z;
         types[i].dista = vx * vx + vy * vy + vz * vz;
       }
+      // 最后一个点
       types[plsize].range = pl[plsize].x * pl[plsize].x + pl[plsize].y * pl[plsize].y;
       give_feature(pl, types);
       // pl_surf += pl;
@@ -134,13 +139,14 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
     time += omp_get_wtime() - t0;
     printf("Feature extraction time: %lf \n", time / count);
   }
-  else
+  else // 不提特征点
   {
     for(uint i=1; i<plsize; i++)
     {
       if((msg->points[i].line < N_SCANS) && ((msg->points[i].tag & 0x30) == 0x10 || (msg->points[i].tag & 0x30) == 0x00))
       {
         valid_num ++;
+        // 累计一段时间再收集 point_filter_num == 2
         if (valid_num % point_filter_num == 0)
         {
           pl_full[i].x = msg->points[i].x;
@@ -149,6 +155,7 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
           pl_full[i].intensity = msg->points[i].reflectivity;
           pl_full[i].curvature = msg->points[i].offset_time / float(1000000); //use curvature as time of each laser points
 
+          // 再次判断，存入pl_surf
           if((abs(pl_full[i].x - pl_full[i-1].x) > 1e-7) 
               || (abs(pl_full[i].y - pl_full[i-1].y) > 1e-7)
               || (abs(pl_full[i].z - pl_full[i-1].z) > 1e-7)
@@ -431,6 +438,7 @@ void Preprocess::velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
         // if(i==(plsize-1))  printf("index: %d layer: %d, yaw: %lf, offset-time: %lf, condition: %d\n", i, layer, yaw_angle, added_pt.curvature, prints);
         if (i % point_filter_num == 0)
         {
+            // 在盲区外
           if(added_pt.x*added_pt.x+added_pt.y*added_pt.y+added_pt.z*added_pt.z > blind)
           {
             pl_surf.points.push_back(added_pt);
@@ -450,6 +458,7 @@ void Preprocess::give_feature(pcl::PointCloud<PointType> &pl, vector<orgtype> &t
 {
   int plsize = pl.size();
   int plsize2;
+  // 没有点
   if(plsize == 0)
   {
     printf("something wrong\n");
@@ -457,6 +466,7 @@ void Preprocess::give_feature(pcl::PointCloud<PointType> &pl, vector<orgtype> &t
   }
   uint head = 0;
 
+  // 筛除在盲区范围里的点
   while(types[head].range < blind)
   {
     head++;
