@@ -1,0 +1,10 @@
+<launch>
+  <node 
+    pkg="fast_lio"
+    type="extract_bag"
+    name="extractbag_tool"
+    output="screen"
+  />
+<!--   <param name="bag_file" type="string" value="/home/hr/datatest/1018_livox_2_1.bag"/>-->
+<!--   <param name="is_custom_msg" type="bool" value="false"/>-->
+</launch>
